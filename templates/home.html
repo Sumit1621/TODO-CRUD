@@ -3,14 +3,200 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Todo List</title>
+    <title>Advanced TODO App</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-ui/1.12.1/jquery-ui.min.js"></script>
+    
+    <style>
+        /* Modern UI with Material Design Styling */
+        body { 
+            font-family: 'Poppins', sans-serif;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* Dark Mode */
+        body.dark-mode { 
+            background: #121212; 
+            color: #fff; 
+        }
+        .dark-mode .task-item { background: #333; border-color: #555; }
+        .dark-mode .progress-bar { background: #555; }
+        .dark-mode button { background: #222; color: #fff; }
+
+        /* Container */
+        .container {
+            max-width: 500px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        /* Buttons */
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover { opacity: 0.8; }
+
+        /* Dark Mode Toggle */
+        #darkModeToggle { background: #333; color: #fff; }
+
+        /* Task List */
+        .task-list { list-style: none; padding: 0; }
+        .task-item {
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: grab;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+
+        /* Priority Colors */
+        .high { color: red; font-weight: bold; }
+        .medium { color: orange; }
+        .low { color: green; }
+
+        /* Completed Tasks */
+        .completed { text-decoration: line-through; opacity: 0.6; }
+
+        /* Progress Bar */
+        .progress-bar {
+            background: lightgray;
+            height: 20px;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress-fill {
+            background: limegreen;
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s;
+        }
+        .progress-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            font-weight: bold;
+            color: black;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+    </style>
 </head>
 <body>
-    <h1>Welcome to the Todo List App</h1>
-    <ul>
-        {% for todo in todos %}
-            <li>{{ todo.title }}</li>  <!-- Adjust the field name based on your Todo model -->
-        {% endfor %}
-    </ul>
+
+    <div class="container">
+        <button id="darkModeToggle">🌙 Toggle Dark Mode</button>
+        <h1>📝 Advanced TODO App</h1>
+
+        <input type="text" id="search" placeholder="🔎 Search tasks..." style="width: 100%; padding: 10px; margin-bottom: 10px;">
+        
+        <form id="taskForm">
+            <input type="text" name="title" id="taskTitle" placeholder="Enter task title" required style="width: 100%; padding: 10px;">
+            <textarea name="description" placeholder="Enter description" style="width: 100%; padding: 10px;"></textarea>
+            <select name="priority">
+                <option value="High">🔥 High</option>
+                <option value="Medium">⚡ Medium</option>
+                <option value="Low">✅ Low</option>
+            </select>
+            <button type="submit">➕ Add Task</button>
+        </form>
+
+        <div class="progress-bar">
+            <div class="progress-fill"></div>
+            <div class="progress-text">0%</div>
+        </div>
+
+        <ul class="task-list">
+            {% for todo in todos %}
+                <li class="task-item" data-id="{{ todo.id }}">
+                    <span class="priority {{ todo.priority|lower }}">{{ todo.title }}</span>
+                    <button onclick="toggleTask('{{ todo.id }}')">✔</button>
+                    <button onclick="deleteTask('{{ todo.id }}')">🗑</button>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <script>
+        // Dark Mode Toggle (Fixed)
+        $(document).ready(function() {
+            if (localStorage.getItem("darkMode") === "enabled") {
+                $('body').addClass("dark-mode");
+            }
+
+            $('#darkModeToggle').click(function() {
+                $('body').toggleClass("dark-mode");
+                localStorage.setItem("darkMode", $('body').hasClass("dark-mode") ? "enabled" : "disabled");
+            });
+        });
+
+        // Add Task (AJAX)
+        $('#taskForm').submit(function(e) {
+            e.preventDefault();
+            $.post('/add/', $(this).serialize(), function(data) {
+                $('.task-list').append(`
+                    <li class="task-item" data-id="${data.id}">
+                        <span class="priority ${data.priority.toLowerCase()}">${data.title}</span>
+                        <button onclick="toggleTask(${data.id})">✔</button>
+                        <button onclick="deleteTask(${data.id})">🗑</button>
+                    </li>
+                `);
+                updateProgress();
+            });
+        });
+
+        // Delete Task (AJAX)
+        function deleteTask(id) {
+            $.post(`/delete/${id}/`, function() {
+                $(`[data-id="${id}"]`).remove();
+                updateProgress();
+            });
+        }
+
+        // Toggle Completion (AJAX)
+        function toggleTask(id) {
+            $.post(`/toggle/${id}/`, function(data) {
+                let task = $(`[data-id="${id}"]`);
+                task.toggleClass('completed', data.completed);
+                updateProgress();
+            });
+        }
+
+        // Drag-and-Drop Reordering (Fixed)
+    $('.task-list').sortable({
+        update: function(event, ui) {
+            let order = $('.task-item').map((_, el) => $(el).data('id')).get();
+            $.post('/reorder/', { 'task_order[]': order }, function(response) {
+                console.log('Task order updated:', response);
+            });
+        }
+    });
+
+        // Update Progress Bar
+        function updateProgress() {
+            let total = $('.task-item').length;
+            let completed = $('.completed').length;
+            let percentage = total > 0 ? (completed / total) * 100 : 0;
+            $('.progress-fill').css('width', `${percentage}%`);
+            $('.progress-text').text(`${Math.round(percentage)}% Completed`);
+        }
+    </script>
+
 </body>
 </html>
+
+
+
+
+
